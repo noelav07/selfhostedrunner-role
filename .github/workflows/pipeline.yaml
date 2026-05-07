@@ -1,0 +1,30 @@
+name: Deploy
+
+on:
+#  push:
+#    branches:
+#      - main
+
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Create S3 bucket
+        run: |
+          aws s3 mb s3://mytestbucket123456noelav07frwv
+
+      - name: Create S3 bucket
+        run: |
+          aws s3 ls 
+
+      - name: Describe EC2 instances
+        run: |
+          aws ec2 describe-instances
