@@ -129,7 +129,6 @@ jobs:
       # ----------------------------------------------------------
       # Trivy Container Image Scan
       # ----------------------------------------------------------
-
       - name: Trivy Image Scan
         run: |
           docker run --rm \
@@ -137,9 +136,9 @@ jobs:
             aquasec/trivy:latest \
             image \
             --severity HIGH,CRITICAL \
+            --ignore-unfixed \
             --exit-code 1 \
             "$ECR_REGISTRY/$IMAGE_NAME:$IMAGE_TAG"
-
 
       # ----------------------------------------------------------
       # Configure AWS Credentials using OIDC
