@@ -1,27 +1,26 @@
-name: Gitleaks
-
-run-name: Gitleaks Secret Scan
+name: gitleaks
 
 on:
   push:
-    branches:
-      - main
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  gitleaks:
-    name: Secret Scan
+  scan:
+    name: gitleaks-scan
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run Gitleaks - Full Git History
+        run: |
+          gitleaks git --redact --exit-code 1 .
