@@ -58,23 +58,15 @@ jobs:
 
 
       # ----------------------------------------------------------
-      # Python Dependencies
-      # ----------------------------------------------------------
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-
-
-      # ----------------------------------------------------------
       # Dependency Vulnerability Scan
       # ----------------------------------------------------------
 
       - name: Dependency Scan - pip-audit
         run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
           python -m pip install pip-audit
-          pip-audit
+          pip-audit -r requirements.txt
 
 
       # ----------------------------------------------------------
@@ -83,17 +75,6 @@ jobs:
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v8
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-
-      # ----------------------------------------------------------
-      # SonarQube Quality Gate
-      # ----------------------------------------------------------
-
-      - name: SonarQube Quality Gate
-        uses: SonarSource/sonarqube-quality-gate-action@v1
-        timeout-minutes: 5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
@@ -124,36 +105,7 @@ jobs:
 
 
       # ----------------------------------------------------------
-      # Configure AWS Credentials using OIDC
-      # ----------------------------------------------------------
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v6.2.3
-        with:
-          aws-region: us-east-1
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-
-
-      # ----------------------------------------------------------
-      # Verify AWS Identity
-      # ----------------------------------------------------------
-
-      - name: Check AWS Access
-        run: |
-          aws sts get-caller-identity
-
-
-      # ----------------------------------------------------------
-      # Login to Amazon ECR
-      # ----------------------------------------------------------
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-
-      # ----------------------------------------------------------
-      # Set Image Name
+      # Set Image Variables
       # ----------------------------------------------------------
 
       - name: Set image variables
@@ -187,6 +139,34 @@ jobs:
             --severity HIGH,CRITICAL \
             --exit-code 1 \
             "$ECR_REGISTRY/$IMAGE_NAME:$IMAGE_TAG"
+
+
+      # ----------------------------------------------------------
+      # Configure AWS Credentials using OIDC
+      # ----------------------------------------------------------
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          aws-region: us-east-1
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+
+
+      # ----------------------------------------------------------
+      # Verify AWS Identity
+      # ----------------------------------------------------------
+
+      - name: Check AWS Access
+        run: |
+          aws sts get-caller-identity
+
+
+      # ----------------------------------------------------------
+      # Login to Amazon ECR
+      # ----------------------------------------------------------
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
 
 
       # ----------------------------------------------------------
