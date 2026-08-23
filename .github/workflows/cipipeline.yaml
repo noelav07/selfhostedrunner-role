@@ -1,0 +1,208 @@
+name: security-aspects
+
+run-name: security-aspects
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+
+  # ============================================================
+  # PHASE 1 - SOURCE CODE SECURITY & QUALITY
+  # ============================================================
+
+  source-security:
+    name: Source Security & Quality
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ----------------------------------------------------------
+      # Checkout
+      # ----------------------------------------------------------
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+
+      # ----------------------------------------------------------
+      # Gitleaks - Full Git History
+      # ----------------------------------------------------------
+
+      - name: Gitleaks - Full History Scan
+        run: |
+          docker run --rm \
+            -v "$PWD:/repo" \
+            ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            git \
+            --redact \
+            --exit-code 1 \
+            /repo
+
+
+      # ----------------------------------------------------------
+      # Python Setup
+      # ----------------------------------------------------------
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+
+      # ----------------------------------------------------------
+      # Python Dependencies
+      # ----------------------------------------------------------
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+
+      # ----------------------------------------------------------
+      # Dependency Vulnerability Scan
+      # ----------------------------------------------------------
+
+      - name: Dependency Scan - pip-audit
+        run: |
+          python -m pip install pip-audit
+          pip-audit
+
+
+      # ----------------------------------------------------------
+      # Unit Tests + Coverage
+      # ----------------------------------------------------------
+
+      - name: Run tests with coverage
+        run: |
+          PYTHONPATH=. pytest --cov=. --cov-report=xml
+
+
+      # ----------------------------------------------------------
+      # SonarQube / SonarCloud
+      # ----------------------------------------------------------
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v8
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+
+      # ----------------------------------------------------------
+      # SonarQube Quality Gate
+      # ----------------------------------------------------------
+
+      - name: SonarQube Quality Gate
+        uses: SonarSource/sonarqube-quality-gate-action@v1
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+
+  # ============================================================
+  # PHASE 2 - BUILD, CONTAINER SECURITY & ECR
+  # ============================================================
+
+  container:
+    name: Build, Scan & Push
+    runs-on: ubuntu-latest
+
+    needs:
+      - source-security
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+
+      # ----------------------------------------------------------
+      # Checkout
+      # ----------------------------------------------------------
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+
+      # ----------------------------------------------------------
+      # Configure AWS Credentials using OIDC
+      # ----------------------------------------------------------
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          aws-region: us-east-1
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+
+
+      # ----------------------------------------------------------
+      # Verify AWS Identity
+      # ----------------------------------------------------------
+
+      - name: Check AWS Access
+        run: |
+          aws sts get-caller-identity
+
+
+      # ----------------------------------------------------------
+      # Login to Amazon ECR
+      # ----------------------------------------------------------
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+
+      # ----------------------------------------------------------
+      # Set Image Name
+      # ----------------------------------------------------------
+
+      - name: Set image variables
+        run: |
+          echo "ECR_REGISTRY=533267179439.dkr.ecr.us-east-1.amazonaws.com" >> "$GITHUB_ENV"
+          echo "IMAGE_NAME=security-aspects" >> "$GITHUB_ENV"
+          echo "IMAGE_TAG=${GITHUB_SHA}" >> "$GITHUB_ENV"
+
+
+      # ----------------------------------------------------------
+      # Build Docker Image
+      # ----------------------------------------------------------
+
+      - name: Build Docker Image
+        run: |
+          docker build \
+            -t "$ECR_REGISTRY/$IMAGE_NAME:$IMAGE_TAG" \
+            .
+
+
+      # ----------------------------------------------------------
+      # Trivy Container Image Scan
+      # ----------------------------------------------------------
+
+      - name: Trivy Image Scan
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:latest \
+            image \
+            --severity HIGH,CRITICAL \
+            --exit-code 1 \
+            "$ECR_REGISTRY/$IMAGE_NAME:$IMAGE_TAG"
+
+
+      # ----------------------------------------------------------
+      # Push Image to ECR
+      # ----------------------------------------------------------
+
+      - name: Push Image to ECR
+        run: |
+          docker push \
+            "$ECR_REGISTRY/$IMAGE_NAME:$IMAGE_TAG"
